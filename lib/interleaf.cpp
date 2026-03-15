@@ -25,6 +25,7 @@ void Interleaf::Clear()
   m_JoiningSize = 0;
   m_ObjectOffsetTable.clear();
   m_ObjectIDTable.clear();
+  m_SlotOffsets.clear();
   DeleteChildren();
 }
 
@@ -125,6 +126,7 @@ Interleaf::Error Interleaf::ReadChunk(Core *parent, FileBase *f, Info *info)
       if (choffset) {
         m_ObjectOffsetTable[choffset] = o;
       }
+      m_SlotOffsets.push_back(choffset);
       desc << std::endl << i << ": 0x" << std::hex << choffset;
     }
     break;
@@ -305,6 +307,13 @@ Interleaf::Error Interleaf::ReadChunk(Core *parent, FileBase *f, Info *info)
     }
   }
 
+  // Stop after reading just the header (MxHd + MxOf)
+  if (m_readFlags & HeaderOnly) {
+    if (static_cast<RIFF::Type>(id) == RIFF::MxOf) {
+      f->seek(0, FileBase::SeekEnd);
+    }
+  }
+
   return ERROR_SUCCESS;
 }
 
@@ -368,6 +377,20 @@ Object *Interleaf::ReadObject(FileBase *f, Object *o, std::ostream &desc)
   }
 
   return o;
+}
+
+Interleaf::Error Interleaf::ReadObject(FileBase *f, uint32_t slot)
+{
+  if (slot >= m_SlotOffsets.size() || m_SlotOffsets[slot] == 0) {
+    return ERROR_INVALID_INPUT;
+  }
+
+  m_JoiningProgress = 0;
+  m_JoiningSize = 0;
+  m_readFlags = IncludeData;
+
+  f->seek(m_SlotOffsets[slot], FileBase::SeekStart);
+  return ReadChunk(this, f, NULL);
 }
 
 Interleaf::Error Interleaf::Read(FileBase *f, int flags)
